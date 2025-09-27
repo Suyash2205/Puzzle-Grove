@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Puzzle Grove</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;700&family=Quicksand:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="animated-bg">
+        <div></div>
+        <div></div>
+        <div></div>
+    </div>
+
+    <a href="index.html" class="back-home">
+        <i class="fas fa-arrow-left"></i>
+        Back to Home
+    </a>
+
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Join Puzzle Grove</h1>
+                <p>Create your account to track your progress and streaks</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+
+            <form class="auth-form" id="registerForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        required 
+                        placeholder="Choose a username"
+                        autocomplete="username"
+                        minlength="3"
+                        maxlength="20"
+                    >
+                    <small style="color: #6b7280; font-size: 0.8rem; margin-top: 4px; display: block;">
+                        3-20 characters, letters and numbers only
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required 
+                        placeholder="Enter your email"
+                        autocomplete="email"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required 
+                        placeholder="Create a password"
+                        autocomplete="new-password"
+                        minlength="4"
+                    >
+                    <small style="color: #6b7280; font-size: 0.8rem; margin-top: 4px; display: block;">
+                        Minimum 4 characters
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input 
+                        type="password" 
+                        id="confirmPassword" 
+                        name="confirmPassword" 
+                        required 
+                        placeholder="Confirm your password"
+                        autocomplete="new-password"
+                        minlength="4"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="fullName">Full Name (Optional)</label>
+                    <input 
+                        type="text" 
+                        id="fullName" 
+                        name="fullName" 
+                        placeholder="Enter your full name"
+                        autocomplete="name"
+                    >
+                </div>
+
+                <button type="submit" class="auth-submit" id="registerBtn">
+                    <i class="fas fa-user-plus"></i>
+                    Create Account
+                </button>
+            </form>
+
+            <div class="auth-links">
+                <p>Already have an account? <a href="login.html">Login here</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class RegisterManager {
+            constructor() {
+                this.reservedUsernames = ['admin', 'dhaarmi', 'user', 'guest', 'test'];
+                this.init();
+            }
+
+            init() {
+                document.getElementById('registerForm').addEventListener('submit', (e) => {
+                    this.handleRegister(e);
+                });
+
+                // Add real-time validation
+                document.getElementById('confirmPassword').addEventListener('input', () => {
+                    this.validatePasswordMatch();
+                });
+
+                document.getElementById('username').addEventListener('input', () => {
+                    this.validateUsername();
+                });
+            }
+
+            handleRegister(e) {
+                e.preventDefault();
+                
+                const formData = this.getFormData();
+                this.clearMessages();
+                
+                // Validate form
+                if (!this.validateForm(formData)) {
+                    return;
+                }
+                
+                // Check if user already exists
+                if (this.userExists(formData.username, formData.email)) {
+                    this.showError('Username or email already exists. Please choose different credentials.');
+                    return;
+                }
+                
+                // Register user
+                this.registerUser(formData);
+            }
+
+            getFormData() {
+                return {
+                    username: document.getElementById('username').value.trim(),
+                    email: document.getElementById('email').value.trim(),
+                    password: document.getElementById('password').value,
+                    confirmPassword: document.getElementById('confirmPassword').value,
+                    fullName: document.getElementById('fullName').value.trim()
+                };
+            }
+
+            validateForm(data) {
+                // Check empty fields
+                if (!data.username || !data.email || !data.password || !data.confirmPassword) {
+                    this.showError('Please fill in all required fields.');
+                    return false;
+                }
+
+                // Username validation
+                if (data.username.length < 3 || data.username.length > 20) {
+                    this.showError('Username must be between 3-20 characters.');
+                    return false;
+                }
+
+                if (!/^[a-zA-Z0-9]+$/.test(data.username)) {
+                    this.showError('Username can only contain letters and numbers.');
+                    return false;
+                }
+
+                if (this.reservedUsernames.includes(data.username.toLowerCase())) {
+                    this.showError('This username is reserved. Please choose a different one.');
+                    return false;
+                }
+
+                // Email validation
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(data.email)) {
+                    this.showError('Please enter a valid email address.');
+                    return false;
+                }
+
+                // Password validation
+                if (data.password.length < 4) {
+                    this.showError('Password must be at least 4 characters long.');
+                    return false;
+                }
+
+                if (data.password !== data.confirmPassword) {
+                    this.showError('Passwords do not match.');
+                    return false;
+                }
+
+                return true;
+            }
+
+            userExists(username, email) {
+                const registeredUsers = this.getRegisteredUsers();
+                return registeredUsers.some(user => 
+                    user.username.toLowerCase() === username.toLowerCase() || 
+                    user.email.toLowerCase() === email.toLowerCase()
+                );
+            }
+
+            registerUser(data) {
+                const registeredUsers = this.getRegisteredUsers();
+                
+                const newUser = {
+                    username: data.username,
+                    email: data.email,
+                    password: data.password,
+                    fullName: data.fullName || data.username,
+                    registeredAt: new Date().toISOString(),
+                    streak: 0,
+                    totalGamesPlayed: 0
+                };
+
+                registeredUsers.push(newUser);
+                localStorage.setItem('puzzleGroveRegisteredUsers', JSON.stringify(registeredUsers));
+
+                // Initialize user stats
+                const userStats = {
+                    streak: 0,
+                    totalGamesPlayed: 0,
+                    gamesWon: 0,
+                    bestScores: {},
+                    achievements: [],
+                    registeredAt: new Date().toISOString()
+                };
+                localStorage.setItem(`puzzleGroveStats_${data.username}`, JSON.stringify(userStats));
+
+                this.showSuccess('Account created successfully! Redirecting to login...');
+
+                // Auto-redirect to login
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 2000);
+            }
+
+            getRegisteredUsers() {
+                const users = localStorage.getItem('puzzleGroveRegisteredUsers');
+                return users ? JSON.parse(users) : [];
+            }
+
+            validatePasswordMatch() {
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                const confirmField = document.getElementById('confirmPassword');
+
+                if (confirmPassword && password !== confirmPassword) {
+                    confirmField.style.borderColor = '#ef4444';
+                } else {
+                    confirmField.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                }
+            }
+
+            validateUsername() {
+                const username = document.getElementById('username').value.trim();
+                const usernameField = document.getElementById('username');
+
+                if (username && (username.length < 3 || !/^[a-zA-Z0-9]+$/.test(username))) {
+                    usernameField.style.borderColor = '#ef4444';
+                } else if (username && this.reservedUsernames.includes(username.toLowerCase())) {
+                    usernameField.style.borderColor = '#f59e0b';
+                } else {
+                    usernameField.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                }
+            }
+
+            showError(message) {
+                const errorDiv = document.getElementById('errorMessage');
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+                
+                // Scroll to top to show error
+                document.querySelector('.auth-card').scrollIntoView({ behavior: 'smooth' });
+            }
+
+            showSuccess(message) {
+                const successDiv = document.getElementById('successMessage');
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+                
+                // Scroll to top to show success
+                document.querySelector('.auth-card').scrollIntoView({ behavior: 'smooth' });
+            }
+
+            clearMessages() {
+                document.getElementById('errorMessage').style.display = 'none';
+                document.getElementById('successMessage').style.display = 'none';
+            }
+        }
+
+        // Initialize register manager
+        new RegisterManager();
+
+        // Add enter key support for form submission
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.closest('.auth-form')) {
+                e.preventDefault();
+                document.getElementById('registerForm').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
