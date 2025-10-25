@@ -1,6 +1,6 @@
 // Anagrams.js - Logic for the Anagrams puzzle game
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // DOM elements
     const startButton = document.getElementById('start-button');
     const resetButton = document.getElementById('reset-button');
@@ -89,13 +89,37 @@ document.addEventListener('DOMContentLoaded', function() {
         ]
     };
     
-    // Load game state and stats from local storage
-    function loadGameState() {
-        const savedStats = localStorage.getItem('anagramsStats');
-        if (savedStats) {
-            gameStats = JSON.parse(savedStats);
+    // Load game state and stats from database
+    async function loadGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, using default stats');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Load stats from database
+                const userStats = await window.dbManager.getUserStats(currentUser.username);
+                if (userStats && userStats.gameStats && userStats.gameStats.anagrams) {
+                    const anagramsStats = userStats.gameStats.anagrams;
+                    gameStats = {
+                        gamesPlayed: anagramsStats.gamesPlayed || 0,
+                        wordsGuessed: anagramsStats.wordsGuessed || 0,
+                        themesCompleted: anagramsStats.themesCompleted || 0,
+                        currentStreak: anagramsStats.currentStreak || 0,
+                        maxStreak: anagramsStats.maxStreak || 0
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error loading game state from database:', error);
+            // Continue with default stats if database fails
         }
         
+        // Load settings from localStorage (these are user preferences, not game stats)
         const darkMode = localStorage.getItem('anagramsDarkMode') === 'true';
         if (darkMode) {
             document.body.classList.add('dark-theme');
@@ -114,9 +138,33 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStatsDisplay();
     }
 
-    // Save game state and stats to local storage
-    function saveGameState() {
-        localStorage.setItem('anagramsStats', JSON.stringify(gameStats));
+    // Save game state and stats to database
+    async function saveGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, skipping save');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Save stats to database
+                await window.dbManager.updateUserStats(currentUser.username, 'anagrams', {
+                    gamesPlayed: gameStats.gamesPlayed,
+                    wordsGuessed: gameStats.wordsGuessed,
+                    themesCompleted: gameStats.themesCompleted,
+                    currentStreak: gameStats.currentStreak,
+                    maxStreak: gameStats.maxStreak
+                });
+            }
+        } catch (error) {
+            console.error('Error saving game state to database:', error);
+            // Continue without saving if database fails
+        }
+        
+        // Save settings to localStorage (these are user preferences, not game stats)
         localStorage.setItem('anagramsDarkMode', document.body.classList.contains('dark-theme'));
         localStorage.setItem('anagramsHighContrast', document.body.classList.contains('high-contrast'));
         localStorage.setItem('anagramsDifficulty', difficulty);
@@ -475,5 +523,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Initialize the game
-    loadGameState();
+    try {
+        await loadGameState();
+    } catch (error) {
+        console.error('Error loading game state:', error);
+    }
 });

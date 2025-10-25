@@ -74,9 +74,9 @@ class HangmanGame {
         this.init();
     }
 
-    init() {
+    async init() {
         this.loadSettings();
-        this.loadStats();
+        await this.loadStats();
         this.setupEventListeners();
         this.createAlphabetGrid();
         this.startNewGame();
@@ -114,15 +114,58 @@ class HangmanGame {
         localStorage.setItem('hangmanSettings', JSON.stringify(settings));
     }
 
-    loadStats() {
-        const savedStats = localStorage.getItem('hangmanStats');
-        if (savedStats) {
-            this.stats = JSON.parse(savedStats);
+    async loadStats() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, using default stats');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Load stats from database
+                const userStats = await window.dbManager.getUserStats(currentUser.username);
+                if (userStats && userStats.gameStats && userStats.gameStats.hangman) {
+                    const hangmanStats = userStats.gameStats.hangman;
+                    this.stats = {
+                        gamesPlayed: hangmanStats.gamesPlayed || 0,
+                        gamesWon: hangmanStats.gamesWon || 0,
+                        currentStreak: hangmanStats.currentStreak || 0,
+                        maxStreak: hangmanStats.maxStreak || 0
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error loading game state from database:', error);
+            // Continue with default stats if database fails
         }
     }
 
-    saveStats() {
-        localStorage.setItem('hangmanStats', JSON.stringify(this.stats));
+    async saveStats() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, skipping save');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Save stats to database
+                await window.dbManager.updateUserStats(currentUser.username, 'hangman', {
+                    gamesPlayed: this.stats.gamesPlayed,
+                    gamesWon: this.stats.gamesWon,
+                    currentStreak: this.stats.currentStreak,
+                    maxStreak: this.stats.maxStreak
+                });
+            }
+        } catch (error) {
+            console.error('Error saving game state to database:', error);
+            // Continue without saving if database fails
+        }
     }
 
     setupEventListeners() {
@@ -353,7 +396,7 @@ class HangmanGame {
         this.stats.gamesPlayed++;
         this.stats.gamesWon++;
         this.stats.currentStreak++;
-        this.saveStats();
+        await this.saveStats();
         this.updateStatsDisplay();
         
         this.playSound('win');
@@ -368,7 +411,7 @@ class HangmanGame {
         this.gameOver = true;
         this.stats.gamesPlayed++;
         this.stats.currentStreak = 0;
-        this.saveStats();
+        await this.saveStats();
         this.updateStatsDisplay();
         
         // Reveal the word
@@ -406,7 +449,7 @@ class HangmanGame {
         this.guessedLetters.push(randomLetter);
         this.hintsUsed++;
         this.stats.hintsUsed++;
-        this.saveStats();
+        await this.saveStats();
         this.updateStatsDisplay();
         
         // Mark as hint-revealed

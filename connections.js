@@ -1,5 +1,5 @@
 // Connections Game Logic
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Game variables
     let currentPuzzle = null;
     let selectedTiles = [];
@@ -41,13 +41,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const gameEndShareButton = document.getElementById('gameEndShareButton');
     const playAgainButton = document.getElementById('playAgainButton');
     
-    // Load game state and stats from local storage
-    function loadGameState() {
-        const savedStats = localStorage.getItem('connectionsStats');
-        if (savedStats) {
-            gameStats = JSON.parse(savedStats);
+    // Load game state and stats from database
+    async function loadGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, using default stats');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Load stats from database
+                const userStats = await window.dbManager.getUserStats(currentUser.username);
+                if (userStats && userStats.gameStats && userStats.gameStats.connections) {
+                    const connectionsStats = userStats.gameStats.connections;
+                    gameStats = {
+                        gamesPlayed: connectionsStats.gamesPlayed || 0,
+                        gamesWon: connectionsStats.gamesWon || 0,
+                        currentStreak: connectionsStats.currentStreak || 0,
+                        maxStreak: connectionsStats.maxStreak || 0,
+                        mistakesAvg: connectionsStats.mistakesAvg || 0
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error loading game state from database:', error);
+            // Continue with default stats if database fails
         }
         
+        // Load settings from localStorage (these are user preferences, not game stats)
         const darkMode = localStorage.getItem('connectionsDarkMode') === 'true';
         if (darkMode) {
             document.body.classList.add('dark-theme');
@@ -63,9 +87,33 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStatsDisplay();
     }
 
-    // Save game state and stats to local storage
-    function saveGameState() {
-        localStorage.setItem('connectionsStats', JSON.stringify(gameStats));
+    // Save game state and stats to database
+    async function saveGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, skipping save');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Save stats to database
+                await window.dbManager.updateUserStats(currentUser.username, 'connections', {
+                    gamesPlayed: gameStats.gamesPlayed,
+                    gamesWon: gameStats.gamesWon,
+                    currentStreak: gameStats.currentStreak,
+                    maxStreak: gameStats.maxStreak,
+                    mistakesAvg: gameStats.mistakesAvg
+                });
+            }
+        } catch (error) {
+            console.error('Error saving game state to database:', error);
+            // Continue without saving if database fails
+        }
+        
+        // Save settings to localStorage (these are user preferences, not game stats)
         localStorage.setItem('connectionsDarkMode', document.body.classList.contains('dark-theme'));
         localStorage.setItem('connectionsHighContrast', document.body.classList.contains('high-contrast'));
     }
@@ -130,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize the game
     async function initGame() {
-        loadGameState();
+        await loadGameState();
         
         // Get a random puzzle
         currentPuzzle = await selectRandomPuzzle();
@@ -574,9 +622,9 @@ document.addEventListener('DOMContentLoaded', function() {
         gameEndShareButton.addEventListener('click', shareResults);
         
         // Play again button
-        playAgainButton.addEventListener('click', () => {
+        playAgainButton.addEventListener('click', async () => {
             hideModal(gameEndModal);
-            initGame();
+            await initGame();
         });
         
         // Click outside modal to close
@@ -618,5 +666,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Start the game
-    initGame();
+    try {
+        await initGame();
+    } catch (error) {
+        console.error('Error initializing game:', error);
+        // Fallback: try to load without database
+        try {
+            await loadGameState();
+        } catch (fallbackError) {
+            console.error('Fallback loadGameState failed:', fallbackError);
+        }
+    }
 });

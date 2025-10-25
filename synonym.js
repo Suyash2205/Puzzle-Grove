@@ -122,9 +122,9 @@ class SynonymGame {
         this.init();
     }
 
-    init() {
+    async init() {
         this.loadSettings();
-        this.loadStats();
+        await this.loadStats();
         this.setupEventListeners();
         this.startNewGame();
     }
@@ -163,15 +163,58 @@ class SynonymGame {
         localStorage.setItem('synonymSettings', JSON.stringify(settings));
     }
 
-    loadStats() {
-        const savedStats = localStorage.getItem('synonymStats');
-        if (savedStats) {
-            this.stats = JSON.parse(savedStats);
+    async loadStats() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, using default stats');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Load stats from database
+                const userStats = await window.dbManager.getUserStats(currentUser.username);
+                if (userStats && userStats.gameStats && userStats.gameStats.synonym) {
+                    const synonymStats = userStats.gameStats.synonym;
+                    this.stats = {
+                        gamesPlayed: synonymStats.gamesPlayed || 0,
+                        gamesWon: synonymStats.gamesWon || 0,
+                        currentStreak: synonymStats.currentStreak || 0,
+                        maxStreak: synonymStats.maxStreak || 0
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error loading game state from database:', error);
+            // Continue with default stats if database fails
         }
     }
 
-    saveStats() {
-        localStorage.setItem('synonymStats', JSON.stringify(this.stats));
+    async saveStats() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, skipping save');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Save stats to database
+                await window.dbManager.updateUserStats(currentUser.username, 'synonym', {
+                    gamesPlayed: this.stats.gamesPlayed,
+                    gamesWon: this.stats.gamesWon,
+                    currentStreak: this.stats.currentStreak,
+                    maxStreak: this.stats.maxStreak
+                });
+            }
+        } catch (error) {
+            console.error('Error saving game state to database:', error);
+            // Continue without saving if database fails
+        }
     }
 
     setupEventListeners() {
@@ -255,7 +298,7 @@ class SynonymGame {
         this.isGameOver = false;
         this.isPaused = false;
         this.stats.gamesPlayed++;
-        this.saveStats();
+        await this.saveStats();
         
         this.updateTimeForMode();
         this.setupLevel();
@@ -557,7 +600,7 @@ class SynonymGame {
         if (this.score > this.stats.bestScore) {
             this.stats.bestScore = this.score;
         }
-        this.saveStats();
+        await this.saveStats();
         
         // Update game over modal
         document.getElementById('gameOverTitle').textContent = this.timeLeft <= 0 ? 'Time\'s Up!' : 'Game Over';
