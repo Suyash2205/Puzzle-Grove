@@ -1,5 +1,5 @@
 // Word Strands Game Logic
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Game variables
     let grid = [];
     let gridSize = 9; // 9x9 grid
@@ -116,13 +116,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const playAgainButton = document.getElementById('playAgainButton');
     const completeWordList = document.getElementById('completeWordList');
 
-    // Load game state and stats from local storage
-    function loadGameState() {
-        const savedStats = localStorage.getItem('wordsearchStats');
-        if (savedStats) {
-            gameStats = JSON.parse(savedStats);
+    // Load game state and stats from database
+    async function loadGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, using default stats');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Load stats from database
+                const userStats = await window.dbManager.getUserStats(currentUser.username);
+                if (userStats && userStats.gameStats && userStats.gameStats.wordsearch) {
+                    const wordsearchStats = userStats.gameStats.wordsearch;
+                    gameStats = {
+                        gamesPlayed: wordsearchStats.gamesPlayed || 0,
+                        gamesWon: wordsearchStats.gamesWon || 0,
+                        currentStreak: wordsearchStats.currentStreak || 0,
+                        maxStreak: wordsearchStats.maxStreak || 0,
+                        hintsUsed: wordsearchStats.hintsUsed || 0,
+                        wordsFound: wordsearchStats.wordsFound || 0,
+                        avgTime: wordsearchStats.avgTime || 0
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error loading game state from database:', error);
+            // Continue with default stats if database fails
         }
         
+        // Load settings from localStorage (these are user preferences, not game stats)
         const darkMode = localStorage.getItem('wordsearchDarkMode') === 'true';
         if (darkMode) {
             document.body.classList.add('dark-theme');
@@ -141,9 +167,35 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStatsDisplay();
     }
 
-    // Save game state and stats to local storage
-    function saveGameState() {
-        localStorage.setItem('wordsearchStats', JSON.stringify(gameStats));
+    // Save game state and stats to database
+    async function saveGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, skipping save');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Save stats to database
+                await window.dbManager.updateUserStats(currentUser.username, 'wordsearch', {
+                    gamesPlayed: gameStats.gamesPlayed,
+                    gamesWon: gameStats.gamesWon,
+                    currentStreak: gameStats.currentStreak,
+                    maxStreak: gameStats.maxStreak,
+                    hintsUsed: gameStats.hintsUsed,
+                    wordsFound: gameStats.wordsFound,
+                    avgTime: gameStats.avgTime
+                });
+            }
+        } catch (error) {
+            console.error('Error saving game state to database:', error);
+            // Continue without saving if database fails
+        }
+        
+        // Save settings to localStorage (these are user preferences, not game stats)
         localStorage.setItem('wordsearchDarkMode', document.body.classList.contains('dark-theme'));
         localStorage.setItem('wordsearchHighContrast', document.body.classList.contains('high-contrast'));
         localStorage.setItem('wordsearchSound', soundToggle.checked);
@@ -189,8 +241,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Initialize the game
-    function initGame() {
-        loadGameState();
+    async function initGame() {
+        await loadGameState();
         
         // Reset game state
         foundWords = [];
@@ -816,9 +868,9 @@ document.addEventListener('DOMContentLoaded', function() {
         gameEndShareButton.addEventListener('click', shareResults);
         
         // Play again button
-        playAgainButton.addEventListener('click', () => {
+        playAgainButton.addEventListener('click', async () => {
             hideModal(gameCompleteModal);
-            initGame();
+            await initGame();
         });
         
         // Click outside modal to close
@@ -877,5 +929,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Start the game
-    initGame();
+    try {
+        await initGame();
+    } catch (error) {
+        console.error('Error initializing game:', error);
+        // Fallback: try to load without database
+        try {
+            await loadGameState();
+        } catch (fallbackError) {
+            console.error('Fallback loadGameState failed:', fallbackError);
+        }
+    }
 });

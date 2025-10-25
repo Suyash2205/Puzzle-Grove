@@ -122,6 +122,7 @@
         </div>
     </div>
 
+    <script src="database.js"></script>
     <script>
         class RegisterManager {
             constructor() {
@@ -153,7 +154,7 @@
                 });
             }
 
-            handleRegister(e) {
+            async handleRegister(e) {
                 e.preventDefault();
                 
                 const formData = this.getFormData();
@@ -164,14 +165,18 @@
                     return;
                 }
                 
-                // Check if user already exists
-                if (this.userExists(formData.username, formData.email)) {
-                    this.showError('Username or email already exists. Please choose different credentials.');
-                    return;
+                try {
+                    // Register user in database
+                    const user = await window.dbManager.registerUser(formData);
+                    this.showSuccess('Account created successfully! Redirecting to login...');
+                    
+                    // Auto-redirect to login
+                    setTimeout(() => {
+                        window.location.href = 'login.html';
+                    }, 2000);
+                } catch (error) {
+                    this.showError(error.message || 'Failed to create account. Please try again.');
                 }
-                
-                // Register user
-                this.registerUser(formData);
             }
 
             getFormData() {
@@ -286,53 +291,6 @@
                 }
             }
 
-            userExists(username, email) {
-                const registeredUsers = this.getRegisteredUsers();
-                return registeredUsers.some(user => 
-                    user.username.toLowerCase() === username.toLowerCase() || 
-                    user.email.toLowerCase() === email.toLowerCase()
-                );
-            }
-
-            registerUser(data) {
-                const registeredUsers = this.getRegisteredUsers();
-                
-                const newUser = {
-                    username: data.username,
-                    email: data.email,
-                    password: data.password,
-                    fullName: data.fullName || data.username,
-                    registeredAt: new Date().toISOString(),
-                    streak: 0,
-                    totalGamesPlayed: 0
-                };
-
-                registeredUsers.push(newUser);
-                localStorage.setItem('puzzleGroveRegisteredUsers', JSON.stringify(registeredUsers));
-
-                // Initialize user stats
-                const userStats = {
-                    streak: 0,
-                    totalGamesPlayed: 0,
-                    gamesWon: 0,
-                    bestScores: {},
-                    achievements: [],
-                    registeredAt: new Date().toISOString()
-                };
-                localStorage.setItem(`puzzleGroveStats_${data.username}`, JSON.stringify(userStats));
-
-                this.showSuccess('Account created successfully! Redirecting to login...');
-
-                // Auto-redirect to login
-                setTimeout(() => {
-                    window.location.href = 'login.html';
-                }, 2000);
-            }
-
-            getRegisteredUsers() {
-                const users = localStorage.getItem('puzzleGroveRegisteredUsers');
-                return users ? JSON.parse(users) : [];
-            }
 
 
             showError(message) {

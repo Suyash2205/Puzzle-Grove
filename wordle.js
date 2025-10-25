@@ -1,5 +1,5 @@
 // Wordle Game Logic
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Game variables
     let currentRow = 0;
     let currentTile = 0;
@@ -43,13 +43,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Initialize the game after words are loaded
-            initGame();
+            await initGame();
         } catch (error) {
             console.error("Error loading words file:", error);
             // Fallback to some default words
             WORDS = ["APPLE", "BEACH", "CHART", "DREAM", "EAGLE"];
             console.warn("Using fallback words due to error.");
-            initGame();
+            await initGame();
         }
     }
 
@@ -74,13 +74,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const gameEndShareButton = document.getElementById('gameEndShareButton');
     const playAgainButton = document.getElementById('playAgainButton');
 
-    // Load game state and stats from local storage
-    function loadGameState() {
-        const savedStats = localStorage.getItem('wordleStats');
-        if (savedStats) {
-            gameStats = JSON.parse(savedStats);
+    // Load game state and stats from database
+    async function loadGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, using default stats');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Load stats from database
+                const userStats = await window.dbManager.getUserStats(currentUser.username);
+                if (userStats && userStats.gameStats && userStats.gameStats.wordle) {
+                    const wordleStats = userStats.gameStats.wordle;
+                    gameStats = {
+                        gamesPlayed: wordleStats.gamesPlayed || 0,
+                        gamesWon: wordleStats.gamesWon || 0,
+                        currentStreak: wordleStats.currentStreak || 0,
+                        maxStreak: wordleStats.maxStreak || 0,
+                        guesses: {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, fail: 0}
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error loading game state from database:', error);
+            // Continue with default stats if database fails
         }
         
+        // Load settings from localStorage (these are user preferences, not game stats)
         const darkMode = localStorage.getItem('wordleDarkMode') === 'true';
         if (darkMode) {
             document.body.classList.add('dark-theme');
@@ -99,9 +123,32 @@ document.addEventListener('DOMContentLoaded', function() {
         updateStatsDisplay();
     }
 
-    // Save game state and stats to local storage
-    function saveGameState() {
-        localStorage.setItem('wordleStats', JSON.stringify(gameStats));
+    // Save game state and stats to database
+    async function saveGameState() {
+        try {
+            // Check if database manager is available
+            if (typeof window.dbManager === 'undefined') {
+                console.log('Database manager not available, skipping save');
+                return;
+            }
+            
+            // Get current user from session
+            const currentUser = JSON.parse(localStorage.getItem('puzzleGroveUser'));
+            if (currentUser && currentUser.username) {
+                // Save stats to database
+                await window.dbManager.updateUserStats(currentUser.username, 'wordle', {
+                    gamesPlayed: gameStats.gamesPlayed,
+                    gamesWon: gameStats.gamesWon,
+                    currentStreak: gameStats.currentStreak,
+                    maxStreak: gameStats.maxStreak
+                });
+            }
+        } catch (error) {
+            console.error('Error saving game state to database:', error);
+            // Continue without saving if database fails
+        }
+        
+        // Save settings to localStorage (these are user preferences, not game stats)
         localStorage.setItem('wordleDarkMode', document.body.classList.contains('dark-theme'));
         localStorage.setItem('wordleHighContrast', document.body.classList.contains('high-contrast'));
         localStorage.setItem('wordleHardMode', hardMode);
@@ -189,8 +236,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Initialize the game
-    function initGame() {
-        loadGameState();
+    async function initGame() {
+        await loadGameState();
         
         // Only select a word if WORDS array has been populated
         if (WORDS.length > 0) {
@@ -264,9 +311,9 @@ document.addEventListener('DOMContentLoaded', function() {
         gameEndShareButton.addEventListener('click', shareResults);
         
         // Play again button
-        playAgainButton.addEventListener('click', function() {
+        playAgainButton.addEventListener('click', async function() {
             hideModal(gameEndModal);
-            initGame();
+            await initGame();
         });
         
         // Click outside modal to close

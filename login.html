@@ -76,6 +76,7 @@
         </div>
     </div>
 
+    <script src="database.js"></script>
     <script>
         class LoginManager {
             constructor() {
@@ -102,7 +103,7 @@
                 });
             }
 
-            handleLogin(e) {
+            async handleLogin(e) {
                 e.preventDefault();
                 
                 const username = document.getElementById('username').value.trim();
@@ -115,21 +116,18 @@
                     return;
                 }
                 
-                // Check hardcoded credentials
-                if (username === this.hardcodedUser.username && password === this.hardcodedUser.password) {
-                    this.loginSuccess(username);
-                } else {
-                    // Check registered users
-                    const registeredUsers = this.getRegisteredUsers();
-                    const user = registeredUsers.find(u => 
-                        u.username.toLowerCase() === username.toLowerCase() && u.password === password
-                    );
-                    
-                    if (user) {
-                        this.loginSuccess(user.username);
-                    } else {
-                        this.showError('Invalid username or password. Please try again.');
+                try {
+                    // Check hardcoded credentials first
+                    if (username === this.hardcodedUser.username && password === this.hardcodedUser.password) {
+                        this.loginSuccess(username);
+                        return;
                     }
+                    
+                    // Check database for registered users
+                    const user = await window.dbManager.authenticateUser(username, password);
+                    this.loginSuccess(user.username, user);
+                } catch (error) {
+                    this.showError(error.message || 'Invalid username or password. Please try again.');
                 }
             }
 
@@ -189,25 +187,47 @@
                 }
             }
 
-            loginSuccess(username) {
-                // Create user session
-                const userData = {
-                    username: username,
-                    streak: this.getUserStreak(username),
-                    lastLogin: new Date().toDateString(),
-                    loginTime: new Date().toISOString()
-                };
-                
-                // Save to localStorage
-                localStorage.setItem('puzzleGroveUser', JSON.stringify(userData));
-                
-                // Show success message
-                this.showSuccess(`Welcome back, ${username}! Redirecting...`);
-                
-                // Redirect after short delay
-                setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 1500);
+            async loginSuccess(username, userData = null) {
+                try {
+                    // Get user stats from database
+                    const stats = await window.dbManager.getUserStats(username);
+                    
+                    // Create user session
+                    const sessionData = {
+                        username: username,
+                        streak: stats ? stats.currentStreak : 1,
+                        lastLogin: new Date().toDateString(),
+                        loginTime: new Date().toISOString(),
+                        userId: userData ? userData.id : null,
+                        totalGamesPlayed: stats ? stats.totalGamesPlayed : 0,
+                        totalScore: stats ? stats.totalScore : 0
+                    };
+                    
+                    // Save to localStorage
+                    localStorage.setItem('puzzleGroveUser', JSON.stringify(sessionData));
+                    
+                    // Show success message
+                    this.showSuccess(`Welcome back, ${username}! Redirecting...`);
+                    
+                    // Redirect after short delay
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1500);
+                } catch (error) {
+                    console.error('Error loading user stats:', error);
+                    // Fallback to basic session
+                    const sessionData = {
+                        username: username,
+                        streak: 1,
+                        lastLogin: new Date().toDateString(),
+                        loginTime: new Date().toISOString()
+                    };
+                    localStorage.setItem('puzzleGroveUser', JSON.stringify(sessionData));
+                    this.showSuccess(`Welcome back, ${username}! Redirecting...`);
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1500);
+                }
             }
 
             getUserStreak(username) {
